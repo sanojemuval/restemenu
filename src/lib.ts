@@ -507,12 +507,20 @@ export async function updateChef(id: string, p: { full_name: string; role: 'chef
   if (!supabase) { const d = demoDB(); const x = d.chefs.find(c => c.id === id); if (x) { x.full_name = p.full_name; x.role = p.role; } saveDemo(d); return; }
   const { error } = await supabase.from('profiles').update({ full_name: p.full_name, role: p.role, updated_at: new Date().toISOString() }).eq('id', id); if (error) throw error;
 }
-// Remove a staff member's access. This deletes their staff profile (so they disappear from the
-// Staff list and can no longer sign in to the admin/chef portal). Their underlying Supabase Auth
-// login is left in place — deleting that entirely requires a server-side (service-role) function.
+// Remove a staff member completely — deletes their Supabase Auth login as well as their
+// staff profile, via the delete-chef server-side function (deleting the auth user cascades
+// to remove the profiles row automatically).
 export async function deleteChef(id: string) {
   if (!supabase) { const d = demoDB(); d.chefs = d.chefs.filter(c => c.id !== id); saveDemo(d); return; }
-  const { error } = await supabase.from('profiles').delete().eq('id', id); if (error) throw error;
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error('You must be signed in.');
+  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-chef`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+    body: JSON.stringify({ id })
+  });
+  const out = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(out?.error || 'Could not remove this staff member.');
 }
 // Admins can delete an order once it is at least 24 hours old (also enforced in the database
 // by the admin_orders_delete policy, so this can't be bypassed from the browser).
