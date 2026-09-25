@@ -209,6 +209,7 @@ button:active,.btn:active,.nav-order:active{transform:translateY(1px) scale(.985
 .ot-hero h1{font-family:'DM Serif Display',Georgia,serif;font-weight:400;font-size:clamp(34px,5.4vw,56px);line-height:1.02;letter-spacing:-.02em;margin:0 0 12px;max-width:560px}
 .ot-hero-copy>p{margin:0;font-size:16px;line-height:1.6;color:#f0dccd;max-width:480px}
 .ot-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+.ot-cancel-row{margin-top:14px}
 .ot-chip{display:inline-flex;align-items:center;gap:7px;padding:5px 12px;border-radius:999px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16);color:#f8e8db;font-size:12px;font-weight:700}
 .ot-chip:has(.kx-avatar){padding-left:5px}
 .ot-chip.wait{background:rgba(245,182,55,.16);border-color:rgba(245,182,55,.45);color:#ffe3a6}

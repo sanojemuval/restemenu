@@ -449,12 +449,12 @@ export async function fetchAdminContent() {
 }
 export async function saveSiteContent(keyName: string, value: any) {
   if (!supabase) { const d = demoDB(); d.content[keyName] = value; saveDemo(d); return; }
-  const { error } = await supabase.from('site_content').upsert({ content_key: keyName, content_value: value, published: true, updated_at: new Date().toISOString() }); if (error) throw error;
+  const { error } = await supabase.from('site_content').upsert({ content_key: keyName, content_value: value, published: true, updated_at: new Date().toISOString() }, { onConflict: 'content_key' }); if (error) throw error;
 }
 export async function saveSiteSection(keyName: string, patch: { is_visible?: boolean; display_order?: number; title?: string; settings?: Record<string, any> }) {
   if (!supabase) { const d = demoDB(); const current = d.sections[keyName] || { visible: true, order: 1, title: keyName, settings: {} }; d.sections[keyName] = { visible: patch.is_visible ?? current.visible, order: patch.display_order ?? current.order, title: patch.title || current.title || keyName, settings: patch.settings ?? current.settings ?? {} }; saveDemo(d); return; }
   const current = await supabase.from('site_sections').select('*').eq('section_key', keyName).maybeSingle();
-  const { error } = await supabase.from('site_sections').upsert({ section_key: keyName, title: patch.title || current.data?.title || keyName, display_order: patch.display_order ?? current.data?.display_order ?? 1, is_visible: patch.is_visible ?? current.data?.is_visible ?? true, settings: patch.settings ?? current.data?.settings ?? {}, published: true, updated_at: new Date().toISOString() });
+  const { error } = await supabase.from('site_sections').upsert({ section_key: keyName, title: patch.title || current.data?.title || keyName, display_order: patch.display_order ?? current.data?.display_order ?? 1, is_visible: patch.is_visible ?? current.data?.is_visible ?? true, settings: patch.settings ?? current.data?.settings ?? {}, published: true, updated_at: new Date().toISOString() }, { onConflict: 'section_key' });
   if (error) throw error;
 }
 export async function uploadSiteMedia(file: File, sectionKey: string, caption = '') {
@@ -520,6 +520,11 @@ export async function adminDeleteOrder(id: string) {
   if (!supabase) { const d = demoDB(); d.orders = d.orders.filter(o => o.id !== id); saveDemo(d); return; }
   const { error } = await supabase.from('orders').delete().eq('id', id); if (error) throw error;
 }
+// Bulk-clean old finished orders (admin only). Returns how many were removed.
+export async function adminDeleteOldOrders(days = 30): Promise<number> {
+  if (!supabase) { const d = demoDB(); const cutoff = Date.now() - days * 24 * 3600 * 1000; const before = d.orders.length; d.orders = d.orders.filter(o => new Date(o.created_at).getTime() >= cutoff); saveDemo(d); return before - d.orders.length; }
+  const { data, error } = await supabase.rpc('admin_delete_old_orders', { p_days: days }); if (error) throw error; return Number(data) || 0;
+}
 export async function currentRole(): Promise<UserRole | null> {
   if (!supabase) return null;
   const { data: { user } } = await supabase.auth.getUser(); if (!user) return null;
@@ -546,6 +551,10 @@ function writeMyOrders(list: MyOrderRef[]) {
 export function rememberOrder(ref: MyOrderRef) { writeMyOrders([ref, ...getMyOrders().filter(x => x.token !== ref.token)]); }
 export function forgetOrder(token: string) { writeMyOrders(getMyOrders().filter(x => x.token !== token)); }
 
+export async function cancelOwnOrder(token: string) {
+  if (!supabase) { const d = demoDB(); const o = d.orders.find(x => x.tracking_token === token); if (!o) throw new Error('Order not found.'); if (o.status !== 'NEW') throw new Error('This order is already being prepared. Please ask a member of staff to cancel it.'); o.status = 'CANCELLED'; saveDemo(d); return; }
+  const { error } = await supabase.rpc('cancel_own_order', { p_tracking_token: token }); if (error) throw error;
+}
 export async function sendCustomerMessage(token: string, body: string) {
   const text = body.trim(); if (!text) throw new Error('Type a message first.');
   if (!supabase) {

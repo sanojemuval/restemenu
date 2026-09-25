@@ -5,7 +5,7 @@ import {
   MessageCircle, RotateCcw, Search, Send, Smartphone, Table2, Wallet, X, Zap
 } from 'lucide-react';
 import {
-  claimOrder, currentStaff, fetchKitchenOrders, fetchMessageStats, fetchOrderByToken, fetchOrderMessages, fetchTables, forgetOrder, formatMoney,
+  claimOrder, cancelOwnOrder, currentStaff, fetchKitchenOrders, fetchMessageStats, fetchOrderByToken, fetchOrderMessages, fetchTables, forgetOrder, formatMoney,
   getMyOrders, isFinished, orderChefName, orderProgress, releaseOrder, sendCustomerMessage, sendStaffMessage, setOrderPayment,
   setOrderStage, subscribeKitchen, supabase,
   type MyOrderRef, type OrderMessage, type OrderStatus, type PaymentMethod, type RestaurantOrder, type StaffInfo, type Table
@@ -150,6 +150,16 @@ export function OrderTracking({ header }: { header: React.ReactNode }) {
   const chatOpen = Boolean(order) && !cancelled && !done;
   const send = async (text: string) => { if (!token) return; await sendCustomerMessage(token, text); await load(); };
   const nav = useNavigate();
+  const [cancelBusy, setCancelBusy] = useState(false); const [cancelError, setCancelError] = useState('');
+  const canSelfCancel = order?.status === 'NEW';
+  const doCancel = async () => {
+    if (!token || cancelBusy) return;
+    if (!window.confirm('Cancel this order?')) return;
+    setCancelBusy(true); setCancelError('');
+    try { await cancelOwnOrder(token); await load(); } catch (e: any) { setCancelError(e?.message || 'Could not cancel the order.'); } finally { setCancelBusy(false); }
+  };
+  // Rough estimate only — actual timing depends on how busy the kitchen is.
+  const estimatedMinsLeft = order && !cancelled && !done ? Math.max(1, Math.round((100 - pct) / 100 * 25)) : null;
 
   return <div>{header}<main className="page ot-page"><div className="container ot-wrap">
     {error ? <div className="ot-card ot-state"><div className="success-icon error-icon"><X size={34} /></div><h1>We could not find that order.</h1><p className="lead">{error}</p><Link className="btn dark" to="/menu">Back to the menu</Link></div>
@@ -164,7 +174,12 @@ export function OrderTracking({ header }: { header: React.ReactNode }) {
               {chef ? <span className="ot-chip"><span className="kx-avatar">{chef.slice(0, 1).toUpperCase()}</span>Chef {chef}</span> : !cancelled && !done ? <span className="ot-chip wait"><Hand size={14} /> Waiting for a chef</span> : null}
               <PayChip order={order} />
               <span className="ot-chip"><Clock3 size={14} /> Placed {clock(order.created_at)}</span>
+              {estimatedMinsLeft !== null && <span className="ot-chip"><Clock3 size={14} /> About {estimatedMinsLeft} min left</span>}
             </div>
+            {canSelfCancel && <div className="ot-cancel-row">
+              {cancelError && <div className="error">{cancelError}</div>}
+              <button type="button" className="btn light-btn" disabled={cancelBusy} onClick={doCancel}>{cancelBusy ? 'CANCELLING…' : 'Cancel this order'}</button>
+            </div>}
           </div>
           {cancelled ? <div className="ot-cancelled"><X size={44} /></div> : <ProgressRing value={pct} status={order.status} label={copy.label} />}
         </section>

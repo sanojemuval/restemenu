@@ -284,3 +284,36 @@ grant execute on function public.set_order_payment(uuid, boolean, text) to authe
 grant execute on function public.send_staff_message(uuid, text) to authenticated;
 grant execute on function public.send_customer_message(text, text) to anon, authenticated;
 grant execute on function public.get_order_by_token(text) to anon, authenticated;
+
+-- ---------------------------------------------------------------------
+-- 10. Guest can cancel their own order, but only before a chef takes it
+-- ---------------------------------------------------------------------
+create or replace function public.cancel_own_order(p_tracking_token text) returns void
+language plpgsql security definer set search_path=public as $$
+declare v_order public.orders%rowtype;
+begin
+  select * into v_order from public.orders where tracking_token = p_tracking_token;
+  if not found then raise exception 'Order not found.'; end if;
+  if v_order.status <> 'NEW' then raise exception 'This order is already being prepared. Please ask a member of staff to cancel it.'; end if;
+  update public.orders set status = 'CANCELLED', updated_at = now() where id = v_order.id;
+end;
+$$;
+revoke all on function public.cancel_own_order(text) from public;
+grant execute on function public.cancel_own_order(text) to anon, authenticated;
+
+-- ---------------------------------------------------------------------
+-- 11. Admin bulk-cleanup: delete every order older than N days (default 30)
+-- ---------------------------------------------------------------------
+create or replace function public.admin_delete_old_orders(p_days int default 30) returns integer
+language plpgsql security definer set search_path=public as $$
+declare v_role text := public.staff_role(); v_count int;
+begin
+  if v_role is null or v_role <> 'admin' then raise exception 'Only an admin can do this.'; end if;
+  if p_days < 1 then raise exception 'Invalid number of days.'; end if;
+  delete from public.orders where created_at < now() - (p_days || ' days')::interval;
+  get diagnostics v_count = row_count;
+  return v_count;
+end;
+$$;
+revoke all on function public.admin_delete_old_orders(int) from public, anon;
+grant execute on function public.admin_delete_old_orders(int) to authenticated;
